@@ -21,12 +21,11 @@ type MultiaddrsIPsRecord struct {
 	Chain     bool   `json:"chain"`
 }
 
-func LoadMultiAddrsIPs() ([]MultiaddrsIPsRecord, error) {
-	file := os.Getenv("MULTIADDRS_IPS")
-	if file == "" {
-		file = "testdata/multiaddrs-ips-latest.json"
+func LoadMultiAddrsIPs(filepath string) ([]MultiaddrsIPsRecord, error) {
+	if filepath == "" {
+		filepath = "testdata/multiaddrs-ips-latest.json"
 	}
-	bytes, err := os.ReadFile(file)
+	bytes, err := os.ReadFile(filepath)
 	if err != nil {
 		return nil, err
 	}

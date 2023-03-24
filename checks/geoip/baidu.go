@@ -21,12 +21,11 @@ type IPsBaiduRecord struct {
 
 type BaiduDetail map[string]interface{}
 
-func LoadIPsBaidu() (map[string]IPsBaiduRecord, error) {
-	file := os.Getenv("IPS_BAIDU")
-	if file == "" {
-		file = "testdata/ips-baidu-latest.json"
+func LoadIPsBaidu(filepath string) (map[string]IPsBaiduRecord, error) {
+	if filepath == "" {
+		filepath = "testdata/ips-baidu-latest.json"
 	}
-	bytes, err := os.ReadFile(file)
+	bytes, err := os.ReadFile(filepath)
 	if err != nil {
 		return nil, err
 	}

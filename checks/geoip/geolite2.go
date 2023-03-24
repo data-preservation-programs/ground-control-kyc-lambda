@@ -24,10 +24,9 @@ type IPsGeolite2Record struct {
 
 type Geolite2Detail map[string]interface{}
 
-func LoadIPsGeolite2() (map[string]IPsGeolite2Record, error) {
-	file := os.Getenv("IPS_GEOLITE2")
-	if file == "" {
-		file = "testdata/ips-geolite2-latest.json"
+func LoadIPsGeolite2(filepath string) (map[string]IPsGeolite2Record, error) {
+	if filepath == "" {
+		filepath = "testdata/ips-geolite2-latest.json"
 	}
 	bytes, err := os.ReadFile(file)
 	if err != nil {

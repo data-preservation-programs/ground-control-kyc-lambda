@@ -1,5 +1,7 @@
 package checks
 
+import "context"
+
 // "responseId": "ACYDBNg8yyGgwk051fZNDE5qZHAzZ_5YEfXpKl3XXZunSjsFZN8h2tSQghrDj2w-PK-QbB0",
 // "timestamp": "2022-07-25T08:40:17.905455Z",
 // "0_your_name": "test_name",
@@ -41,7 +43,7 @@ type NormalizedResponse struct {
 }
 
 type Check interface {
-	DoCheck(args ...string) (NormalizedResponse, error)
+	DoCheck(ctx context.Context, checkctx context.Context, args ...string) (NormalizedResponse, error)
 }
 
 // could be a map[string]Check
