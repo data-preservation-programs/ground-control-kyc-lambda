@@ -45,11 +45,6 @@ func (*GeoIPCheck) DoCheck(ctx context.Context, miner MinerData) (checks.Normali
 		fmt.Println(err)
 	}
 
-	continent, ok := continentCodes[miner.CountryCode]
-	if !ok {
-		fmt.Println("Continent not found")
-	}
-
 	geodata, err := LoadGeoData()
 	if err != nil {
 		return checks.NormalizedLocation{}, err
@@ -63,6 +58,17 @@ func (*GeoIPCheck) DoCheck(ctx context.Context, miner MinerData) (checks.Normali
 	ok, data, err := GeoMatchExists(context.Background(), geodata, geocodeClient, currentEpoch, miner)
 	if !ok {
 		return checks.NormalizedLocation{}, err
+	}
+
+	continent, ok := continentCodes[data.GeoDataAddresses[0].Country]
+	if !ok {
+		continent := continentCodes[miner.CountryCode]
+		if continent != "" {
+			fmt.Printf("Continent %s found for country %s ", continent, miner.CountryCode)
+		} else {
+			fmt.Println("Continent not found")
+			// bail?
+		}
 	}
 
 	response := checks.NormalizedLocation{

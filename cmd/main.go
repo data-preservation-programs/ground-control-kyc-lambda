@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/data-preservation-programs/ground-control-kyc-lambda/checks"
+	"github.com/data-preservation-programs/ground-control-kyc-lambda/checks/geoip"
 )
 
 // miner_id, city, country_code
@@ -15,16 +16,24 @@ import (
 var RegisteredChecks []checks.Check
 
 func handleRequest(ctx context.Context, formSubmission checks.FormSubmission) (checks.NormalizedResponse, error) {
-	checkCtx := context.Background()
+	// checkCtx := context.Background()
 
-	for _, c := range RegisteredChecks {
-		c.DoCheck(ctx, checkCtx, formSubmission)
-	}
+	// for _, c := range RegisteredChecks {
+	// 	c.DoCheck(ctx, checkCtx, formSubmission)
+	// }
 
-	for _, err := range checkCtx.Errors {
-		log.Fatalln(err)
-		return nil, checkCtx.Errors
-	}
+	// for _, err := range checkCtx.Errors {
+	// 	log.Fatalln(err)
+	// 	return nil, checkCtx.Errors
+	// }geoip
+
+	checker := geoip.GeoIPCheck{}
+
+	location, err := checker.DoCheck(ctx, geoip.MinerData{
+		MinerID:     formSubmission.MinerID,
+		City:        formSubmission.City,
+		CountryCode: formSubmission.Country,
+	})
 
 	contactInfoMap := map[string]string{
 		"your_name":                        formSubmission.Name,
@@ -44,10 +53,8 @@ func handleRequest(ctx context.Context, formSubmission checks.FormSubmission) (c
 	result := checks.NormalizedResponse{
 		FormSubmission: formSubmission,
 		NormalizedMiner: checks.NormalizedMiner{
-			SPID:          minerIDInt,
-			LocCity:       "",
-			LocCountry:    "",
-			LocContinent:  "",
+			SPID: minerIDInt,
+			location,
 			Validated:     true,
 			SPContactInfo: string(contactInfoJSON), // TODO: we need to seperate sp contact info
 		},
