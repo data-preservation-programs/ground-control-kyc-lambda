@@ -141,12 +141,21 @@ func TestGeoMatchExists(t *testing.T) {
 	geodata, err := LoadGeoData()
 	assert.Nil(t, err)
 
-	geocodeClient, err := getGeocodeClient()
+	geocodeClient, err := GetGeocodeClient()
 	assert.Nil(t, err)
 
 	for _, c := range cases {
-		ok, extra, err := GeoMatchExists(context.Background(), geodata, geocodeClient,
-			currentEpoch, c.minerID, c.city, c.countryCode)
+		ok, extra, err := GeoMatchExists(
+			context.Background(),
+			geodata,
+			geocodeClient,
+			currentEpoch,
+			MinerData{
+				c.minerID,
+				c.city,
+				c.countryCode,
+			},
+		)
 		assert.Nil(t, err)
 		assert.Equal(t, c.want, ok)
 		if extraArtifacts != "" {

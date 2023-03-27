@@ -2,8 +2,15 @@ package geoip
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"path"
 	"strconv"
 	"strings"
 
@@ -13,6 +20,7 @@ import (
 )
 
 const MAX_DISTANCE = 600
+const downloadsDir = "/downloads"
 
 type GeoData struct {
 	MultiaddrsIPs []MultiaddrsIPsRecord
@@ -22,17 +30,19 @@ type GeoData struct {
 }
 
 func LoadGeoData() (*GeoData, error) {
-	multiaddrsIPs, err := LoadMultiAddrsIPs()
+	results, err := getLocationData()
+
+	multiaddrsIPs, err := LoadMultiAddrsIPs(results[0])
 	if err != nil {
 		return nil, err
 	}
 
-	ipsGeolite2, err := LoadIPsGeolite2()
+	ipsGeolite2, err := LoadIPsGeolite2(results[1])
 	if err != nil {
 		return nil, err
 	}
 
-	ipsBaidu, err := LoadIPsBaidu()
+	ipsBaidu, err := LoadIPsBaidu(results[2])
 	if err != nil {
 		return nil, err
 	}
@@ -81,35 +91,34 @@ func (g *GeoData) filterByMinerID(ctx context.Context, minerID string, currentEp
 	}, nil
 }
 
-type ExtraArtifacts struct {
+type FinalGeoData struct {
 	GeoData           *GeoData
 	GeocodeLocations  []geodist.Coord
 	GeoDataAddresses  []Address
 	GoogleGeocodeData []maps.GeocodingResult
 }
 
-func findMatchGeoLite2(g *GeoData, minerID string, city string,
-	countryCode string, locations []geodist.Coord) bool {
+func findMatchGeoLite2(g *GeoData, miner MinerData, locations []geodist.Coord) bool {
 	var match_found bool = false
 	for ip, geolite2 := range g.IPsGeolite2 {
 		// Match country
-		if geolite2.Country != countryCode {
+		if geolite2.Country != miner.CountryCode {
 			log.Printf("No Geolite2 country match for %s (%s != GeoLite2:%s), IP: %s\n",
-				minerID, countryCode, geolite2.Country, ip)
+				miner.MinerID, miner.CountryCode, geolite2.Country, ip)
 			continue
 		}
 		log.Printf("Matching Geolite2 country for %s (%s) found, IP: %s\n",
-			minerID, countryCode, ip)
+			miner.MinerID, miner.CountryCode, ip)
 
 		// Try to match city
-		if geolite2.City == city {
+		if geolite2.City == miner.City {
 			log.Printf("Match found! %s matches Geolite2 city name (%s), IP: %s\n",
-				minerID, city, ip)
+				miner.MinerID, miner.City, ip)
 			match_found = true
 			continue
 		}
 		log.Printf("No Geolite2 city match for %s (%s != GeoLite2:%s), IP: %s\n",
-			minerID, city, geolite2.City, ip)
+			miner.MinerID, miner.City, geolite2.City, ip)
 
 		// Try to match based on Lat/Lng
 		l := geolite2.Geolite2["location"].(map[string]interface{})
@@ -121,8 +130,8 @@ func findMatchGeoLite2(g *GeoData, minerID string, city string,
 
 		// Distance based matching
 		for i, location := range locations {
-			log.Printf("Geocoded via Google %s, %s #%d Lat/Long %v", city,
-				countryCode, i+1, location)
+			log.Printf("Geocoded via Google %s, %s #%d Lat/Long %v", miner.City,
+				miner.CountryCode, i+1, location)
 			_, distance, err := geodist.VincentyDistance(location, geolite2Location)
 			if err != nil {
 				log.Println("Unable to compute Vincenty Distance.")
@@ -140,32 +149,31 @@ func findMatchGeoLite2(g *GeoData, minerID string, city string,
 	return match_found
 }
 
-func findMatchGeoIP2(g *GeoData, minerID string, city string,
-	countryCode string, locations []geodist.Coord) bool {
+func findMatchGeoIP2(g *GeoData, miner MinerData, locations []geodist.Coord) bool {
 	provisional_match := false
 	match_found := false
 GEOIP2_LOOP:
 	for ip, geoip2 := range g.IPsGeoIP2 {
 		// Match country
-		if geoip2.Country.IsoCode != countryCode {
+		if geoip2.Country.IsoCode != miner.CountryCode {
 			log.Printf("No GeoIP2 country match for %s (%s != GeoIP2:%s), IP: %s\n",
-				minerID, countryCode, geoip2.Country.IsoCode, ip)
+				miner.MinerID, miner.CountryCode, geoip2.Country.IsoCode, ip)
 			continue
 		}
 		log.Printf("Matching GeoIP2 country for %s (%s) found, IP: %s\n",
-			minerID, countryCode, ip)
+			miner.MinerID, miner.CountryCode, ip)
 
 		// Try to match city
 		for _, cityName := range geoip2.City.Names {
-			if cityName == city {
+			if cityName == miner.City {
 				log.Printf("Match found! %s matches GeoIP2 city name (%s), IP: %s\n",
-					minerID, city, ip)
+					miner.MinerID, miner.City, ip)
 				match_found = true
 				continue GEOIP2_LOOP
 			}
 		}
 		log.Printf("No GeoIP2 city match for %s (%s != GeoIP2:%s), IP: %s\n",
-			minerID, city, geoip2.City.Names["en"], ip)
+			miner.MinerID, miner.City, geoip2.City.Names["en"], ip)
 		if geoip2.City.Names["en"] == "" {
 			provisional_match = true
 		}
@@ -179,8 +187,8 @@ GEOIP2_LOOP:
 
 		// Distance based matching
 		for i, location := range locations {
-			log.Printf("Geocoded via Google %s, %s #%d Lat/Long %v", city,
-				countryCode, i+1, location)
+			log.Printf("Geocoded via Google %s, %s #%d Lat/Long %v", miner.City,
+				miner.CountryCode, i+1, location)
 			_, distance, err := geodist.VincentyDistance(location, geoip2Location)
 			if err != nil {
 				log.Println("Unable to compute Vincenty Distance.")
@@ -198,25 +206,24 @@ GEOIP2_LOOP:
 	if provisional_match {
 		log.Printf("Match found! %s had GeoIP2 entries that matched country, "+
 			"all with no city data.\n",
-			minerID)
+			miner.MinerID)
 		match_found = true
 	}
 	return match_found
 }
 
-func findMatchBaidu(g *GeoData, minerID string, city string,
-	countryCode string, locations []geodist.Coord) bool {
+func findMatchBaidu(g *GeoData, miner MinerData, locations []geodist.Coord) bool {
 	match_found := false
 	for ip, baidu := range g.IPsBaidu {
 		// Try to match city
-		if baidu.City == city {
+		if baidu.City == miner.City {
 			log.Printf("Match found! %s matches city name (%s), IP: %s\n",
-				minerID, city, ip)
+				miner.MinerID, miner.City, ip)
 			match_found = true
 			continue
 		}
 		log.Printf("No city match for %s (%s != Baidu:%s), IP: %s\n",
-			minerID, city, baidu.City, ip)
+			miner.MinerID, miner.City, baidu.City, ip)
 
 		baiduContent := baidu.Baidu["content"].(map[string]interface{})
 		baiduPoint := baiduContent["point"].(map[string]interface{})
@@ -237,8 +244,8 @@ func findMatchBaidu(g *GeoData, minerID string, city string,
 		log.Printf("Baidu Lat/Lng: %v for IP %s\n", baiduLocation, ip)
 		// Distance based matching
 		for i, location := range locations {
-			log.Printf("Geocoded via Google %s, %s #%d Lat/Long %v", city,
-				countryCode, i+1, location)
+			log.Printf("Geocoded via Google %s, %s #%d Lat/Long %v", miner.City,
+				miner.CountryCode, i+1, location)
 			_, distance, err := geodist.VincentyDistance(location, baiduLocation)
 			if err != nil {
 				log.Println("Unable to compute Vincenty Distance.")
@@ -257,60 +264,123 @@ func findMatchBaidu(g *GeoData, minerID string, city string,
 }
 
 // GeoMatchExists checks if the miner has an IP address with a location close to the city/country
-func GeoMatchExists(ctx context.Context, geodata *GeoData,
-	geocodeClient *maps.Client, currentEpoch int64, minerID string, city string,
-	countryCode string) (bool, ExtraArtifacts, error) {
-
+func GeoMatchExists(
+	ctx context.Context,
+	geodata *GeoData,
+	geocodeClient *maps.Client,
+	currentEpoch int64,
+	miner MinerData,
+) (bool, FinalGeoData, error) {
 	// Quick fixes for bad input data
-	if countryCode == "United States" || countryCode == "San Jose, CA" {
-		countryCode = "US"
+	if miner.CountryCode == "United States" || miner.CountryCode == "San Jose, CA" {
+		miner.CountryCode = "US"
 	}
-	if countryCode == "Canada" {
-		countryCode = "CA"
+	if miner.CountryCode == "Canada" {
+		miner.CountryCode = "CA"
 	}
-	countryCode = strings.ToUpper(countryCode)
+	miner.CountryCode = strings.ToUpper(miner.CountryCode)
 
-	log.Printf("Searching for geo matches for %s (%s, %s)", minerID,
-		city, countryCode)
-	g, err := geodata.filterByMinerID(ctx, minerID, currentEpoch)
-	extraArtifacts := ExtraArtifacts{GeoData: g}
+	log.Printf("Searching for geo matches for %s (%s, %s)", miner.MinerID, miner.City, miner.CountryCode)
+	g, err := geodata.filterByMinerID(ctx, miner.MinerID, currentEpoch)
 	if err != nil {
-		return false, extraArtifacts, err
+		return false, FinalGeoData{}, err
+	}
+
+	data := FinalGeoData{GeoData: g}
+	if err != nil {
+		return false, data, err
 	}
 
 	if len(g.MultiaddrsIPs) == 0 {
-		log.Printf("No Multiaddrs/IPs found for %s\n", minerID)
-		return false, extraArtifacts, nil
+		log.Printf("No Multiaddrs/IPs found for %s\n", miner.MinerID)
+		return false, data, nil
 	}
 
-	locations, addresses, googleResponse, err := geocodeAddress(ctx, geocodeClient,
-		fmt.Sprintf("%s, %s", city, countryCode))
+	locations, addresses, googleResponse, err := geocodeAddress(ctx, geocodeClient, fmt.Sprintf("%s, %s", miner.City, miner.CountryCode))
 	if err != nil {
 		log.Fatalf("Geocode error: %s", err)
 	}
-	extraArtifacts.GeocodeLocations = locations
-	extraArtifacts.GeoDataAddresses = addresses
-	extraArtifacts.GoogleGeocodeData = googleResponse
+	data.GeocodeLocations = locations
+	data.GeoDataAddresses = addresses
+	data.GoogleGeocodeData = googleResponse
 
 	match_found := false
 
 	// First, try with Baidu data
-	if countryCode == "CN" {
-		match_found = findMatchBaidu(g, minerID, city, countryCode, locations)
+	if miner.CountryCode == "CN" {
+		match_found = findMatchBaidu(g, miner, locations)
 	}
 
 	// Next, try with Geolite2 data
 	if !match_found {
-		match_found = findMatchGeoLite2(g, minerID, city, countryCode, locations)
+		match_found = findMatchGeoLite2(g, miner, locations)
 	}
 
 	// last, try with GeoIP2 API data
 	if !match_found {
-		match_found = findMatchGeoIP2(g, minerID, city, countryCode, locations)
+		match_found = findMatchGeoIP2(g, miner, locations)
 	}
 
 	if !match_found {
 		log.Println("No match found.")
 	}
-	return match_found, extraArtifacts, nil
+	return match_found, data, nil
+}
+
+// returns a mapping of the tmp paths to the geodata downloads
+func getLocationData() ([]string, error) {
+	var tempDir string
+	if _, err := os.Stat(fmt.Sprintf("/tmp/%s", downloadsDir)); errors.Is(err, os.ErrNotExist) {
+		tempDir, err = ioutil.TempDir("/tmp", downloadsDir)
+		if err != nil {
+			log.Fatal("Failed to create temp dir:", err)
+		}
+	}
+
+	// not necessary as lambda removes all tmp files
+	// TODO maybe make this more persistent cron so lambdas can share the latest data (cache)
+	// defer func() {
+	// 	if _, err := os.Stat(fmt.Sprintf("/tmp/%s", downloadsDir)); errors.Is(err, os.ErrExist) {
+	// 		err := os.RemoveAll(tempDir)
+	// 		if err != nil {
+	// 			log.Fatal("Failed to remove temp dir:", err)
+	// 		}
+	// 	}
+	// }()
+
+	urls := []string{
+		"https://multiaddrs-ips.feeds.provider.quest/multiaddrs-ips-latest.json",
+		"https://geoip.feeds.provider.quest/ips-geolite2-latest.json",
+		"https://geoip.feeds.provider.quest/ips-baidu-latest.json",
+	}
+
+	result := []string{}
+
+	for i, dataUrl := range urls {
+		u, err := url.Parse(dataUrl)
+		if err != nil {
+			return nil, err
+		}
+		base := path.Base(u.Path)
+		dest := path.Join(tempDir, base)
+
+		if _, err := os.Stat(dest); errors.Is(err, os.ErrNotExist) {
+			log.Printf("Downloading %s ...\n", base)
+			resp, err := http.Get(dataUrl)
+			if err != nil {
+				return nil, err
+			}
+			defer resp.Body.Close()
+			out, err := os.Create(dest)
+			if err != nil {
+				return nil, err
+			}
+			defer out.Close()
+			io.Copy(out, resp.Body)
+		}
+
+		result[i] = dest
+	}
+
+	return result, nil
 }

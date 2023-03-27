@@ -86,6 +86,7 @@ func RunChecksForFormResponses(ctx context.Context, formReponse GoogleFormRespon
 	minerCheck := MinerCheckResult{miner, success, testOutput, extra}
 
 	responseResult = ResponseResult{formReponse, minerCheck}
+	log.Println()
 
 	jsonData, err := json.MarshalIndent(responseResult, "", "  ")
 	if err != nil {

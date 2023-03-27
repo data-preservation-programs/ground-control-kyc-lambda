@@ -21,12 +21,16 @@ type FormSubmission struct {
 	Country string `json:"country"`
 }
 
+type NormalizedLocation struct {
+	LocCity      string `json:"loc_city"`
+	LocCountry   string `json:"loc_country"`
+	LocContinent string `json:"loc_continent"`
+}
+
 type NormalizedMiner struct {
-	SPID          string `json:"sp_id"`
-	LocCity       string `json:"loc_city"`
-	LocCountry    string `json:"loc_country"`
-	LocContinent  string `json:"loc_continent"`
-	Validated     string `json:"validated"`
+	SPID int `json:"sp_id"`
+	NormalizedLocation
+	Validated     bool   `json:"validated"`
 	SPContactInfo string `json:"contact_info"`
 }
 

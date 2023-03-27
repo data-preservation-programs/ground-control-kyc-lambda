@@ -28,7 +28,7 @@ func LoadIPsGeolite2(filepath string) (map[string]IPsGeolite2Record, error) {
 	if filepath == "" {
 		filepath = "testdata/ips-geolite2-latest.json"
 	}
-	bytes, err := os.ReadFile(file)
+	bytes, err := os.ReadFile(filepath)
 	if err != nil {
 		return nil, err
 	}
