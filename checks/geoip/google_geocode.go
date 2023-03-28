@@ -12,6 +12,10 @@ import (
 
 func GetGeocodeClient() (*maps.Client, error) {
 	key := os.Getenv("GOOGLE_MAPS_API_KEY")
+	for _, env := range os.Environ() {
+		fmt.Println(env)
+	}
+	// key := "AIzaSyBR7nTa-b45oDKLYVcjlzPuOapjy07rT8E"
 	if key == "" {
 		log.Fatalf("Missing GOOGLE_MAPS_API_KEY")
 	}

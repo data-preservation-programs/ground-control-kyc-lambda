@@ -28,8 +28,10 @@ type NormalizedLocation struct {
 }
 
 type NormalizedMiner struct {
-	SPID int `json:"sp_id"`
-	NormalizedLocation
+	SPID          int    `json:"sp_id"`
+	LocCity       string `json:"loc_city"`
+	LocCountry    string `json:"loc_country"`
+	LocContinent  string `json:"loc_continent"`
 	Validated     bool   `json:"validated"`
 	SPContactInfo string `json:"contact_info"`
 }

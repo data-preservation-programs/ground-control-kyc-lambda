@@ -20,7 +20,7 @@ import (
 )
 
 const MAX_DISTANCE = 600
-const downloadsDir = "/downloads"
+const downloadsDir = "downloads"
 
 type GeoData struct {
 	MultiaddrsIPs []MultiaddrsIPsRecord
@@ -31,6 +31,9 @@ type GeoData struct {
 
 func LoadGeoData() (*GeoData, error) {
 	results, err := getLocationData()
+	if err != nil {
+		return nil, err
+	}
 
 	multiaddrsIPs, err := LoadMultiAddrsIPs(results[0])
 	if err != nil {
@@ -307,19 +310,19 @@ func GeoMatchExists(
 	match_found := false
 
 	// First, try with Baidu data
-	if miner.CountryCode == "CN" {
-		match_found = findMatchBaidu(g, miner, locations)
-	}
+	// if miner.CountryCode == "CN" {
+	// 	match_found = findMatchBaidu(g, miner, locations)
+	// }
 
-	// Next, try with Geolite2 data
-	if !match_found {
-		match_found = findMatchGeoLite2(g, miner, locations)
-	}
+	// // Next, try with Geolite2 data
+	// if !match_found {
+	// 	match_found = findMatchGeoLite2(g, miner, locations)
+	// }
 
-	// last, try with GeoIP2 API data
-	if !match_found {
-		match_found = findMatchGeoIP2(g, miner, locations)
-	}
+	// // last, try with GeoIP2 API data
+	// if !match_found {
+	// 	match_found = findMatchGeoIP2(g, miner, locations)
+	// }
 
 	if !match_found {
 		log.Println("No match found.")
@@ -328,7 +331,7 @@ func GeoMatchExists(
 }
 
 // returns a mapping of the tmp paths to the geodata downloads
-func getLocationData() ([]string, error) {
+func getLocationData() ([3]string, error) {
 	var tempDir string
 	if _, err := os.Stat(fmt.Sprintf("/tmp/%s", downloadsDir)); errors.Is(err, os.ErrNotExist) {
 		tempDir, err = ioutil.TempDir("/tmp", downloadsDir)
@@ -354,12 +357,12 @@ func getLocationData() ([]string, error) {
 		"https://geoip.feeds.provider.quest/ips-baidu-latest.json",
 	}
 
-	result := []string{}
+	result := [3]string{}
 
 	for i, dataUrl := range urls {
 		u, err := url.Parse(dataUrl)
 		if err != nil {
-			return nil, err
+			return [3]string{}, err
 		}
 		base := path.Base(u.Path)
 		dest := path.Join(tempDir, base)
@@ -368,12 +371,12 @@ func getLocationData() ([]string, error) {
 			log.Printf("Downloading %s ...\n", base)
 			resp, err := http.Get(dataUrl)
 			if err != nil {
-				return nil, err
+				return [3]string{}, err
 			}
 			defer resp.Body.Close()
 			out, err := os.Create(dest)
 			if err != nil {
-				return nil, err
+				return [3]string{}, err
 			}
 			defer out.Close()
 			io.Copy(out, resp.Body)

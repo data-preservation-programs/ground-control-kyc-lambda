@@ -60,6 +60,7 @@ func (*GeoIPCheck) DoCheck(ctx context.Context, miner MinerData) (checks.Normali
 		return checks.NormalizedLocation{}, err
 	}
 
+	// might not be necessary -- geodata has continent in it.
 	continent, ok := continentCodes[data.GeoDataAddresses[0].Country]
 	if !ok {
 		continent := continentCodes[miner.CountryCode]
