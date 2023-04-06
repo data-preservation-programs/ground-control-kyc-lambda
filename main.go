@@ -21,7 +21,7 @@ func handleRequest(request events.APIGatewayProxyRequest) (events.APIGatewayProx
 	var formSubmission checks.FormSubmission
 	err := json.Unmarshal([]byte(request.Body), &formSubmission)
 	if err != nil {
-		return events.APIGatewayProxyResponse{}, fmt.Errorf("failed to deserialize request body: %v", err)
+		return events.APIGatewayProxyResponse{StatusCode: 400}, fmt.Errorf("failed to deserialize request body: %v", err)
 	}
 
 	ctx := context.Background()
@@ -29,11 +29,11 @@ func handleRequest(request events.APIGatewayProxyRequest) (events.APIGatewayProx
 	// check miner power before geoip
 	pass, err := checkMinerPower(ctx, formSubmission.MinerID)
 	if err != nil {
-		return events.APIGatewayProxyResponse{}, err
+		return events.APIGatewayProxyResponse{StatusCode: 400}, err
 	}
 
 	if !pass {
-		return events.APIGatewayProxyResponse{}, errors.New("miner power too low")
+		return events.APIGatewayProxyResponse{StatusCode: 400}, errors.New("miner power too low")
 	}
 
 	checker := geoip.GeoIPCheck{}
@@ -45,7 +45,7 @@ func handleRequest(request events.APIGatewayProxyRequest) (events.APIGatewayProx
 	})
 	if err != nil {
 		log.Fatalln(err)
-		return events.APIGatewayProxyResponse{}, err
+		return events.APIGatewayProxyResponse{StatusCode: 400}, err
 	}
 
 	contactInfoMap := map[string]string{
@@ -85,12 +85,15 @@ func handleRequest(request events.APIGatewayProxyRequest) (events.APIGatewayProx
 
 	jsonResponse, err := json.Marshal(result)
 	if err != nil {
-		return events.APIGatewayProxyResponse{}, fmt.Errorf("failed to serialize response: %v", err)
+		return events.APIGatewayProxyResponse{StatusCode: 4}, fmt.Errorf("failed to serialize response: %v", err)
 	}
 
 	apiResponse := events.APIGatewayProxyResponse{
 		StatusCode: 200,
 		Body:       string(jsonResponse),
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+		},
 	}
 
 	return apiResponse, nil
