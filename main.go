@@ -68,7 +68,7 @@ func handleRequest(ctx context.Context, formSubmission checks.FormSubmission) (c
 			SPContactInfo: string(contactInfoJSON), // TODO: we need to seperate sp contact info
 		},
 		NormalizedOrg: checks.NormalizedOrg{
-			SPOrgID:        "",
+			SPOrgID:        "", // TODO: need to get appropriate OrgID or create one
 			SPOrganization: formSubmission.SPName,
 			OrgContactInfo: string(contactInfoJSON), // TODO: we need to seperate sp contact info
 		},

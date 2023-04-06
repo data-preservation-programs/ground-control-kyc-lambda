@@ -52,13 +52,8 @@ type Check interface {
 	DoCheck(ctx context.Context, checkctx context.Context, args ...string) (NormalizedResponse, error)
 }
 
-// could be a map[string]Check
 var RegisteredChecks []Check
 
 func Register(c Check) {
 	RegisteredChecks = append(RegisteredChecks, c)
 }
-
-// sort by priority
-// sort.Slice(RegisteredChecks, func(...))
-// GetPriority() int

@@ -90,12 +90,13 @@ func (g *GeoData) filterByMinerID(ctx context.Context, minerID string, currentEp
 				if r, ok := g.IPsBaidu[m.IP]; ok {
 					ipsBaidu[m.IP] = r
 				}
-				r, err := getGeoIP2(ctx, m.IP)
-				if err != nil {
-					return &GeoData{}, err
-				}
+				// TODO: commenting this out until getting a valid MAXMIND_LICENSE_KEY
+				// r, err := getGeoIP2(ctx, m.IP)
+				// if err != nil {
+				// 	return &GeoData{}, err
+				// }
 
-				ipsGeoIP2[m.IP] = r
+				// ipsGeoIP2[m.IP] = r
 			}
 		}
 	}
@@ -170,7 +171,7 @@ func findMatchGeoLite2(g *GeoData, miner MinerData, locations []geodist.Coord) b
 func findMatchGeoIP2(g *GeoData, miner MinerData, locations []geodist.Coord) bool {
 	provisional_match := false
 	match_found := false
-GEOIP2_LOOP:
+
 	for ip, geoip2 := range g.IPsGeoIP2 {
 		// Match country
 		if geoip2.Country.IsoCode != miner.CountryCode {
@@ -187,7 +188,7 @@ GEOIP2_LOOP:
 				log.Printf("Match found! %s matches GeoIP2 city name (%s), IP: %s\n",
 					miner.MinerID, miner.City, ip)
 				match_found = true
-				continue GEOIP2_LOOP
+				continue
 			}
 		}
 		log.Printf("No GeoIP2 city match for %s (%s != GeoIP2:%s), IP: %s\n",
