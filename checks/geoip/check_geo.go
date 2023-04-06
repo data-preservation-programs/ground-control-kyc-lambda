@@ -24,6 +24,7 @@ const downloadsDir = "downloads"
 
 type GeoData struct {
 	MultiaddrsIPs []MultiaddrsIPsRecord
+	Ipinfo        *IPInfoResolver
 	IPsGeolite2   map[string]IPsGeolite2Record
 	IPsBaidu      map[string]IPsBaiduRecord
 	IPsGeoIP2     map[string]geoip2.Response
@@ -40,6 +41,11 @@ func LoadGeoData() (*GeoData, error) {
 		return nil, err
 	}
 
+	ipinfo, err := NewIPInfoResolver()
+	if err != nil {
+		return nil, err
+	}
+
 	ipsGeolite2, err := LoadIPsGeolite2(results[1])
 	if err != nil {
 		return nil, err
@@ -52,6 +58,7 @@ func LoadGeoData() (*GeoData, error) {
 
 	return &GeoData{
 		multiaddrsIPs,
+		ipinfo,
 		ipsGeolite2,
 		ipsBaidu,
 		make(map[string]geoip2.Response),
@@ -64,6 +71,12 @@ func (g *GeoData) filterByMinerID(ctx context.Context, minerID string, currentEp
 	ipsGeoLite2 := make(map[string]IPsGeolite2Record)
 	ipsBaidu := make(map[string]IPsBaiduRecord)
 	ipsGeoIP2 := make(map[string]geoip2.Response)
+
+	ipinfo, err := NewIPInfoResolver()
+	if err != nil {
+		return nil, err
+	}
+
 	for _, m := range g.MultiaddrsIPs {
 		if m.Miner == minerID {
 			if int64(m.Epoch) < minEpoch {
@@ -81,6 +94,7 @@ func (g *GeoData) filterByMinerID(ctx context.Context, minerID string, currentEp
 				if err != nil {
 					return &GeoData{}, err
 				}
+
 				ipsGeoIP2[m.IP] = r
 			}
 		}
@@ -88,6 +102,7 @@ func (g *GeoData) filterByMinerID(ctx context.Context, minerID string, currentEp
 
 	return &GeoData{
 		multiaddrsIPs,
+		ipinfo,
 		ipsGeoLite2,
 		ipsBaidu,
 		ipsGeoIP2,
