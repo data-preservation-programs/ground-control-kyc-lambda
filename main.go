@@ -4,27 +4,36 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"math/big"
 	"strconv"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/data-preservation-programs/ground-control-kyc-lambda/checks"
 	"github.com/data-preservation-programs/ground-control-kyc-lambda/checks/geoip"
 	"github.com/data-preservation-programs/ground-control-kyc-lambda/checks/minpower"
 )
 
-type passFail bool
+// checks.NormalizedResponse, passFail, error
+func handleRequest(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	var formSubmission checks.FormSubmission
+	err := json.Unmarshal([]byte(request.Body), &formSubmission)
+	if err != nil {
+		return events.APIGatewayProxyResponse{}, fmt.Errorf("failed to deserialize request body: %v", err)
+	}
 
-func handleRequest(ctx context.Context, formSubmission checks.FormSubmission) (checks.NormalizedResponse, passFail, error) {
+	ctx := context.Background()
+
 	// check miner power before geoip
 	pass, err := checkMinerPower(ctx, formSubmission.MinerID)
 	if err != nil {
-		return checks.NormalizedResponse{}, false, err
+		return events.APIGatewayProxyResponse{}, err
 	}
 
 	if !pass {
-		return checks.NormalizedResponse{}, false, errors.New("miner power too low")
+		return events.APIGatewayProxyResponse{}, errors.New("miner power too low")
 	}
 
 	checker := geoip.GeoIPCheck{}
@@ -36,7 +45,7 @@ func handleRequest(ctx context.Context, formSubmission checks.FormSubmission) (c
 	})
 	if err != nil {
 		log.Fatalln(err)
-		return checks.NormalizedResponse{}, false, err
+		return events.APIGatewayProxyResponse{}, err
 	}
 
 	contactInfoMap := map[string]string{
@@ -74,7 +83,17 @@ func handleRequest(ctx context.Context, formSubmission checks.FormSubmission) (c
 		},
 	}
 
-	return result, true, nil
+	jsonResponse, err := json.Marshal(result)
+	if err != nil {
+		return events.APIGatewayProxyResponse{}, fmt.Errorf("failed to serialize response: %v", err)
+	}
+
+	apiResponse := events.APIGatewayProxyResponse{
+		StatusCode: 200,
+		Body:       string(jsonResponse),
+	}
+
+	return apiResponse, nil
 }
 
 func checkMinerPower(ctx context.Context, minerID string) (bool, error) {
